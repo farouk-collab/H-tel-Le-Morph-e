@@ -4,7 +4,7 @@ Application web pour l'hotel **Le Morphee** avec :
 
 - un front React + Vite
 - une API Express
-- une base MySQL/MariaDB
+- une base SQLite locale
 - un espace admin
 - un mode de paiement mock ou PayGate
 
@@ -13,15 +13,14 @@ Application web pour l'hotel **Le Morphee** avec :
 - React 18
 - Vite 5
 - Express 5
-- MySQL / MariaDB via `mysql2`
+- SQLite locale via `node:sqlite`
 - Tailwind CSS
 
 ## Prerequis
 
-- Node.js 20+
+- Node.js recent compatible avec `node:sqlite`
+- Recommande : **Node.js 22+**
 - npm
-- MySQL ou MariaDB lance localement
-- En environnement XAMPP : demarrer **Apache** et surtout **MySQL**
 
 ## Installation
 
@@ -32,59 +31,18 @@ npm install
 Copy-Item .env.example .env
 ```
 
-## Base de donnees
-
-Le backend utilise maintenant une **vraie base MySQL/MariaDB**.
-
-Par defaut, la configuration locale attend :
-
-- host : `127.0.0.1`
-- port : `3306`
-- user : `root`
-- password : vide
-- database : `hotel_le_morphee`
-
-Au demarrage du backend :
-
-- la base `hotel_le_morphee` est creee automatiquement si elle n'existe pas
-- les tables sont initialisees automatiquement
-- les donnees par defaut sont seedees automatiquement
-- un compte admin est cree automatiquement
-
-## Variables d'environnement
-
-```env
-PORT=4000
-APP_URL=http://localhost:5173
-JWT_SECRET=change-me-in-production
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=
-DB_NAME=hotel_le_morphee
-DB_CONNECTION_LIMIT=10
-DEFAULT_ADMIN_PASSWORD=admin123
-PAYMENT_MODE=mock
-PAYGATE_API_BASE=https://paygateglobal.com/api/v1
-PAYGATE_PAYMENT_PAGE=https://paygateglobal.com/v1/page
-PAYGATE_IDENTIFIER=
-PAYGATE_API_KEY=
-PAYGATE_CALLBACK_URL=http://localhost:4000/api/payments/callback/paygate
-PAYGATE_RETURN_URL=http://localhost:5173/mon-compte
-```
-
 ## Lancement
 
 ### Demarrage complet
-
-```powershell
-npm run dev
-```
 
 Cette commande lance :
 
 - l'API sur `http://localhost:4000`
 - le front Vite sur `http://localhost:5173`
+
+```powershell
+npm run dev
+```
 
 ### Lancer les services separement
 
@@ -105,6 +63,44 @@ Backend en mode watch :
 ```powershell
 npm run dev:server
 ```
+
+## Base de donnees
+
+Le projet n'a pas besoin de MySQL, PostgreSQL ou XAMPP pour la base.
+
+La base est une SQLite locale stockee dans :
+
+`server/data/hotel.db`
+
+Au demarrage du backend :
+
+- la base est creee automatiquement si elle n'existe pas
+- les tables sont initialisees automatiquement
+- des donnees par defaut sont injectees
+- un compte admin est cree automatiquement
+
+Un ancien export JSON est aussi conserve dans :
+
+`server/data/db.json`
+
+## Variables d'environnement
+
+```env
+PORT=4000
+APP_URL=http://localhost:5173
+JWT_SECRET=change-me-in-production
+PAYMENT_MODE=mock
+PAYGATE_API_BASE=https://paygateglobal.com/api/v1
+PAYGATE_PAYMENT_PAGE=https://paygateglobal.com/v1/page
+PAYGATE_IDENTIFIER=
+PAYGATE_API_KEY=
+PAYGATE_CALLBACK_URL=http://localhost:4000/api/payments/callback/paygate
+PAYGATE_RETURN_URL=http://localhost:5173/mon-compte
+```
+
+Option supplementaire utile :
+
+- `DEFAULT_ADMIN_PASSWORD` pour changer le mot de passe admin par defaut au premier seed
 
 ## Acces admin par defaut
 
@@ -184,25 +180,26 @@ npm run preview
 ```text
 src/              Frontend React
 server/           API Express
-server/lib/       Acces MySQL/MariaDB
-server/data/      Export legacy local
+server/data/      Base SQLite et donnees locales
 scripts/dev.mjs   Lancement simultane front + back
 public/           Assets statiques
 ```
 
 ## Depannage rapide
 
-### L'API ne demarre pas
+### Le projet ne demarre pas
 
-- verifier que MySQL/MariaDB tourne
-- verifier les variables `DB_*` dans `.env`
-- verifier que l'utilisateur MySQL a le droit de creer la base
+- verifier que Node.js est assez recent
+- verifier que `npm install` a bien ete execute
+- verifier que `.env` existe a la racine
 
-### Erreur de connexion MySQL
+### La base ne se cree pas
 
-- verifier `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`
-- si XAMPP est utilise, verifier que le module **MySQL** est bien demarre
+- lancer `npm run server`
+- verifier que le dossier `server/data/` est accessible en ecriture
 
-### Version de Node
+### Le front ne parle pas a l'API
 
-Le projet doit tourner avec une version recente de Node. La machine actuelle renvoie **Node v16.20.2**, qui est trop ancienne pour certaines dependances du projet.
+- verifier que le backend tourne sur `http://localhost:4000`
+- verifier que le front tourne sur `http://localhost:5173`
+- verifier que `APP_URL` dans `.env` vaut bien `http://localhost:5173`

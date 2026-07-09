@@ -2,23 +2,14 @@
 
 ## Stockage
 
-- Base MySQL / MariaDB : `hotel_le_morphee`
+- Base locale SQLite : `server/data/hotel.db`
 - Ancien export JSON conserve : `server/data/db.json`
 
 ## Demarrage
 
 1. Copier `.env.example` vers `.env`
-2. Demarrer MySQL / MariaDB
-3. Lancer l'API avec `npm run server`
-4. Lancer le front avec `npm run dev`
-
-## Variables base de donnees
-
-- `DB_HOST`
-- `DB_PORT`
-- `DB_USER`
-- `DB_PASSWORD`
-- `DB_NAME`
+2. Lancer l'API avec `npm run server`
+3. Lancer le front avec `npm run dev`
 
 ## Comptes initiaux
 
@@ -52,5 +43,5 @@
 
 ## Note technique
 
-- Cette version utilise MySQL/MariaDB localement pour un stockage persistant plus proche de la production.
+- Cette version utilise SQLite localement dans le projet pour une installation simple sans service externe.
 - Le backend conserve les memes endpoints que le front actuel pour limiter les regressions.

@@ -171,7 +171,7 @@ function buildSpaceReservation(req, db) {
 }
 
 app.get('/api/health', async (_req, res) => {
-  res.json({ ok: true, service: 'hotel-le-morphee-api', mode: process.env.PAYMENT_MODE || 'mock', storage: 'mysql' })
+  res.json({ ok: true, service: 'hotel-le-morphee-api', mode: process.env.PAYMENT_MODE || 'mock', storage: 'sqlite' })
 })
 
 app.post('/api/auth/register', async (req, res) => {
@@ -746,4 +746,5 @@ app.post('/api/payments/callback/paygate', handlePayGateCallback)
 app.listen(PORT, () => {
   console.log(`Hotel Le Morphee API listening on http://localhost:${PORT}`)
 })
+
 
