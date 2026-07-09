@@ -17,7 +17,7 @@ import { useSiteData } from '../context/SiteDataContext'
 
 export default function Home() {
   const navigate = useNavigate()
-  const { rooms, spaces, offers, testimonials, user, addReservation, addSpaceReservation, initiatePayment, addNewsletter } = useSiteData()
+  const { rooms, spaces, offers, testimonials, user, addReservation, addSpaceReservation, initiatePayment, submitNewsletter } = useSiteData()
   const [booking, setBooking] = useState({ checkIn: '', checkOut: '', guests: '2' })
   const [availability, setAvailability] = useState(null)
   const [search, setSearch] = useState('')
@@ -117,7 +117,7 @@ export default function Home() {
     }
   }
 
-  const handleNewsletterSubmit = (event) => {
+  const handleNewsletterSubmit = async (event) => {
     event.preventDefault()
 
     if (!newsletterEmail.trim() || !newsletterEmail.includes('@')) {
@@ -130,10 +130,18 @@ export default function Home() {
       return
     }
 
-    addNewsletter(newsletterEmail.trim())
-    setNewsletterEmail('')
-    setNewsletterConsent(false)
-    setNewsletterMessage('Demande d’inscription enregistrée. Vous pouvez aussi nous contacter directement par email.')
+    try {
+      const result = await submitNewsletter(newsletterEmail.trim())
+      setNewsletterEmail('')
+      setNewsletterConsent(false)
+      setNewsletterMessage(
+        result.created
+          ? "Inscription enregistrée. Nous pourrons vous contacter par email au sujet des actualités de l'hôtel."
+          : 'Cet email est déjà inscrit à la newsletter.'
+      )
+    } catch (error) {
+      setNewsletterMessage(error.message)
+    }
   }
 
   return (

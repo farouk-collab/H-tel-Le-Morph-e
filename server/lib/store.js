@@ -1,7 +1,7 @@
 ﻿import fs from 'node:fs'
 import path from 'node:path'
 import bcrypt from 'bcryptjs'
-import { DatabaseSync } from 'node:sqlite'
+import mysql from 'mysql2/promise'
 import { fileURLToPath } from 'node:url'
 import { defaultRooms } from '../../src/data/rooms.js'
 import { services as defaultSpaces } from '../../src/data/services.js'
@@ -9,15 +9,39 @@ import { defaultTestimonials } from '../../src/data/testimonials.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const DB_FILE = path.resolve(__dirname, '../data/hotel.db')
 const LEGACY_JSON_FILE = path.resolve(__dirname, '../data/db.json')
 
-function ensureDirectory() {
-  fs.mkdirSync(path.dirname(DB_FILE), { recursive: true })
-}
+let pool
 
 function nowIso() {
   return new Date().toISOString()
+}
+
+function getDbConfig(withDatabase = true) {
+  const config = {
+    host: process.env.DB_HOST || '127.0.0.1',
+    port: Number(process.env.DB_PORT || 3306),
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    waitForConnections: true,
+    connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 10),
+    queueLimit: 0,
+    multipleStatements: true,
+  }
+
+  if (withDatabase) {
+    config.database = process.env.DB_NAME || 'hotel_le_morphee'
+  }
+
+  return config
+}
+
+async function getPool() {
+  if (!pool) {
+    pool = mysql.createPool(getDbConfig(true))
+  }
+
+  return pool
 }
 
 function createSeed() {
@@ -48,6 +72,8 @@ function createSeed() {
     })),
     reservations: [],
     payments: [],
+    contacts: [],
+    newsletters: [],
     testimonials: defaultTestimonials.map((testimonial, index) => ({
       ...testimonial,
       id: Number(testimonial.id) || index + 1,
@@ -55,72 +81,6 @@ function createSeed() {
       updatedAt: nowIso(),
     })),
   }
-}
-
-function openDb() {
-  ensureDirectory()
-  const db = new DatabaseSync(DB_FILE)
-  db.exec(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA foreign_keys = ON;
-
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY,
-      email TEXT NOT NULL UNIQUE,
-      role TEXT NOT NULL,
-      created_at TEXT,
-      data TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS rooms (
-      id INTEGER PRIMARY KEY,
-      slug TEXT,
-      created_at TEXT,
-      updated_at TEXT,
-      data TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS spaces (
-      id INTEGER PRIMARY KEY,
-      slug TEXT,
-      created_at TEXT,
-      updated_at TEXT,
-      data TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS reservations (
-      id INTEGER PRIMARY KEY,
-      user_id INTEGER,
-      room_id INTEGER,
-      status TEXT,
-      created_at TEXT,
-      updated_at TEXT,
-      data TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS payments (
-      id INTEGER PRIMARY KEY,
-      user_id INTEGER,
-      reservation_id INTEGER,
-      reference TEXT UNIQUE,
-      status TEXT,
-      created_at TEXT,
-      updated_at TEXT,
-      data TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS testimonials (
-      id INTEGER PRIMARY KEY,
-      created_at TEXT,
-      updated_at TEXT,
-      data TEXT NOT NULL
-    );
-  `)
-  return db
-}
-
-function tableCount(db, table) {
-  return db.prepare(`SELECT COUNT(*) as count FROM ${table}`).get().count
 }
 
 function parseRows(rows) {
@@ -137,157 +97,303 @@ function readLegacyJson() {
   }
 }
 
-function writeWholeDb(db, data) {
-  const insertUser = db.prepare('INSERT INTO users (id, email, role, created_at, data) VALUES (?, ?, ?, ?, ?)')
-  const insertRoom = db.prepare('INSERT INTO rooms (id, slug, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?)')
-  const insertSpace = db.prepare('INSERT INTO spaces (id, slug, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?)')
-  const insertReservation = db.prepare('INSERT INTO reservations (id, user_id, room_id, status, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?, ?, ?)')
-  const insertPayment = db.prepare('INSERT INTO payments (id, user_id, reservation_id, reference, status, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-  const insertTestimonial = db.prepare('INSERT INTO testimonials (id, created_at, updated_at, data) VALUES (?, ?, ?, ?)')
-
-  db.exec('BEGIN')
+async function ensureDatabaseExists() {
+  const connection = await mysql.createConnection(getDbConfig(false))
+  const dbName = process.env.DB_NAME || 'hotel_le_morphee'
 
   try {
-    db.exec('DELETE FROM users; DELETE FROM rooms; DELETE FROM spaces; DELETE FROM reservations; DELETE FROM payments; DELETE FROM testimonials;')
+    await connection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`)
+  } finally {
+    await connection.end()
+  }
+}
+
+async function createTables(db) {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INT PRIMARY KEY,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      role VARCHAR(50) NOT NULL,
+      created_at VARCHAR(50) NULL,
+      data LONGTEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS rooms (
+      id INT PRIMARY KEY,
+      slug VARCHAR(255) NULL,
+      created_at VARCHAR(50) NULL,
+      updated_at VARCHAR(50) NULL,
+      data LONGTEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS spaces (
+      id INT PRIMARY KEY,
+      slug VARCHAR(255) NULL,
+      created_at VARCHAR(50) NULL,
+      updated_at VARCHAR(50) NULL,
+      data LONGTEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS reservations (
+      id INT PRIMARY KEY,
+      user_id INT NULL,
+      room_id INT NULL,
+      status VARCHAR(50) NULL,
+      created_at VARCHAR(50) NULL,
+      updated_at VARCHAR(50) NULL,
+      data LONGTEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS payments (
+      id INT PRIMARY KEY,
+      user_id INT NULL,
+      reservation_id INT NULL,
+      reference VARCHAR(255) NULL UNIQUE,
+      status VARCHAR(50) NULL,
+      created_at VARCHAR(50) NULL,
+      updated_at VARCHAR(50) NULL,
+      data LONGTEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS contacts (
+      id INT PRIMARY KEY,
+      email VARCHAR(255) NULL,
+      status VARCHAR(50) NULL,
+      created_at VARCHAR(50) NULL,
+      updated_at VARCHAR(50) NULL,
+      data LONGTEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS newsletters (
+      id INT PRIMARY KEY,
+      email VARCHAR(255) NULL UNIQUE,
+      status VARCHAR(50) NULL,
+      created_at VARCHAR(50) NULL,
+      updated_at VARCHAR(50) NULL,
+      data LONGTEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS testimonials (
+      id INT PRIMARY KEY,
+      created_at VARCHAR(50) NULL,
+      updated_at VARCHAR(50) NULL,
+      data LONGTEXT NOT NULL
+    );
+  `)
+}
+
+async function tableCount(db, table) {
+  const [rows] = await db.query(`SELECT COUNT(*) AS count FROM \`${table}\``)
+  return Number(rows[0]?.count || 0)
+}
+
+async function loadSnapshot(db) {
+  const [users] = await db.query('SELECT data FROM users ORDER BY id ASC')
+  const [rooms] = await db.query('SELECT data FROM rooms ORDER BY id DESC')
+  const [spaces] = await db.query('SELECT data FROM spaces ORDER BY id DESC')
+  const [reservations] = await db.query('SELECT data FROM reservations ORDER BY id DESC')
+  const [payments] = await db.query('SELECT data FROM payments ORDER BY id DESC')
+  const [contacts] = await db.query('SELECT data FROM contacts ORDER BY id DESC')
+  const [newsletters] = await db.query('SELECT data FROM newsletters ORDER BY id DESC')
+  const [testimonials] = await db.query('SELECT data FROM testimonials ORDER BY id DESC')
+
+  return {
+    users: parseRows(users),
+    rooms: parseRows(rooms),
+    spaces: parseRows(spaces),
+    reservations: parseRows(reservations),
+    payments: parseRows(payments),
+    contacts: parseRows(contacts),
+    newsletters: parseRows(newsletters),
+    testimonials: parseRows(testimonials),
+  }
+}
+
+async function writeWholeDb(connection, data) {
+  await connection.beginTransaction()
+
+  try {
+    await connection.query('DELETE FROM users')
+    await connection.query('DELETE FROM rooms')
+    await connection.query('DELETE FROM spaces')
+    await connection.query('DELETE FROM reservations')
+    await connection.query('DELETE FROM payments')
+    await connection.query('DELETE FROM contacts')
+    await connection.query('DELETE FROM newsletters')
+    await connection.query('DELETE FROM testimonials')
 
     for (const user of data.users || []) {
-      insertUser.run(user.id, user.email, user.role || 'customer', user.createdAt || nowIso(), JSON.stringify(user))
+      await connection.query(
+        'INSERT INTO users (id, email, role, created_at, data) VALUES (?, ?, ?, ?, ?)',
+        [user.id, user.email, user.role || 'customer', user.createdAt || nowIso(), JSON.stringify(user)],
+      )
     }
 
     for (const room of data.rooms || []) {
-      insertRoom.run(room.id, room.slug || null, room.createdAt || nowIso(), room.updatedAt || nowIso(), JSON.stringify(room))
+      await connection.query(
+        'INSERT INTO rooms (id, slug, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?)',
+        [room.id, room.slug || null, room.createdAt || nowIso(), room.updatedAt || nowIso(), JSON.stringify(room)],
+      )
     }
 
     for (const space of data.spaces || []) {
-      insertSpace.run(space.id, space.slug || null, space.createdAt || nowIso(), space.updatedAt || nowIso(), JSON.stringify(space))
+      await connection.query(
+        'INSERT INTO spaces (id, slug, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?)',
+        [space.id, space.slug || null, space.createdAt || nowIso(), space.updatedAt || nowIso(), JSON.stringify(space)],
+      )
     }
 
     for (const reservation of data.reservations || []) {
-      insertReservation.run(
-        reservation.id,
-        reservation.userId || null,
-        reservation.roomId || null,
-        reservation.status || 'pending',
-        reservation.createdAt || nowIso(),
-        reservation.updatedAt || reservation.createdAt || nowIso(),
-        JSON.stringify(reservation),
+      await connection.query(
+        'INSERT INTO reservations (id, user_id, room_id, status, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [
+          reservation.id,
+          reservation.userId || null,
+          reservation.roomId || null,
+          reservation.status || 'pending',
+          reservation.createdAt || nowIso(),
+          reservation.updatedAt || reservation.createdAt || nowIso(),
+          JSON.stringify(reservation),
+        ],
       )
     }
 
     for (const payment of data.payments || []) {
-      insertPayment.run(
-        payment.id,
-        payment.userId || null,
-        payment.reservationId || null,
-        payment.reference || null,
-        payment.status || 'pending',
-        payment.createdAt || nowIso(),
-        payment.updatedAt || payment.createdAt || nowIso(),
-        JSON.stringify(payment),
+      await connection.query(
+        'INSERT INTO payments (id, user_id, reservation_id, reference, status, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          payment.id,
+          payment.userId || null,
+          payment.reservationId || null,
+          payment.reference || null,
+          payment.status || 'pending',
+          payment.createdAt || nowIso(),
+          payment.updatedAt || payment.createdAt || nowIso(),
+          JSON.stringify(payment),
+        ],
+      )
+    }
+
+    for (const contact of data.contacts || []) {
+      await connection.query(
+        'INSERT INTO contacts (id, email, status, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?, ?)',
+        [
+          contact.id,
+          contact.email || null,
+          contact.status || 'new',
+          contact.createdAt || nowIso(),
+          contact.updatedAt || contact.createdAt || nowIso(),
+          JSON.stringify(contact),
+        ],
+      )
+    }
+
+    for (const newsletter of data.newsletters || []) {
+      await connection.query(
+        'INSERT INTO newsletters (id, email, status, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?, ?)',
+        [
+          newsletter.id,
+          newsletter.email || null,
+          newsletter.status || 'subscribed',
+          newsletter.createdAt || nowIso(),
+          newsletter.updatedAt || newsletter.createdAt || nowIso(),
+          JSON.stringify(newsletter),
+        ],
       )
     }
 
     for (const testimonial of data.testimonials || []) {
-      insertTestimonial.run(
-        testimonial.id,
-        testimonial.createdAt || nowIso(),
-        testimonial.updatedAt || testimonial.createdAt || nowIso(),
-        JSON.stringify(testimonial),
+      await connection.query(
+        'INSERT INTO testimonials (id, created_at, updated_at, data) VALUES (?, ?, ?, ?)',
+        [
+          testimonial.id,
+          testimonial.createdAt || nowIso(),
+          testimonial.updatedAt || testimonial.createdAt || nowIso(),
+          JSON.stringify(testimonial),
+        ],
       )
     }
 
-    db.exec('COMMIT')
+    await connection.commit()
   } catch (error) {
-    db.exec('ROLLBACK')
+    await connection.rollback()
     throw error
   }
 }
 
-export function ensureDb() {
-  const db = openDb()
+export async function ensureDb() {
+  await ensureDatabaseExists()
 
-  try {
-    const seed = createSeed()
-    const legacy = readLegacyJson()
-    const isEmpty = ['users', 'rooms', 'spaces', 'reservations', 'payments', 'testimonials'].every((table) => tableCount(db, table) === 0)
+  const db = await getPool()
+  await createTables(db)
 
-    if (isEmpty) {
-      writeWholeDb(db, { ...seed, ...(legacy || {}) })
-      return
-    }
+  const seed = createSeed()
+  const legacy = readLegacyJson()
+  const tables = ['users', 'rooms', 'spaces', 'reservations', 'payments', 'contacts', 'newsletters', 'testimonials']
+  const counts = await Promise.all(tables.map((table) => tableCount(db, table)))
+  const isEmpty = counts.every((count) => count === 0)
 
-    const current = {
-      users: parseRows(db.prepare('SELECT data FROM users ORDER BY id ASC').all()),
-      rooms: parseRows(db.prepare('SELECT data FROM rooms ORDER BY id DESC').all()),
-      spaces: parseRows(db.prepare('SELECT data FROM spaces ORDER BY id DESC').all()),
-      reservations: parseRows(db.prepare('SELECT data FROM reservations ORDER BY id DESC').all()),
-      payments: parseRows(db.prepare('SELECT data FROM payments ORDER BY id DESC').all()),
-      testimonials: parseRows(db.prepare('SELECT data FROM testimonials ORDER BY id DESC').all()),
-    }
+  if (isEmpty) {
+    const connection = await db.getConnection()
 
-    let changed = false
-
-    if (!current.users.length) {
-      current.users = seed.users
-      changed = true
-    }
-    if (!current.rooms.length) {
-      current.rooms = seed.rooms
-      changed = true
-    }
-    if (!current.spaces.length) {
-      current.spaces = seed.spaces
-      changed = true
-    }
-    if (!current.testimonials.length) {
-      current.testimonials = seed.testimonials
-      changed = true
+    try {
+      await writeWholeDb(connection, { ...seed, ...(legacy || {}) })
+    } finally {
+      connection.release()
     }
 
-    if (changed) {
-      writeWholeDb(db, current)
+    return
+  }
+
+  const current = await loadSnapshot(db)
+  let changed = false
+
+  if (!current.users.length) {
+    current.users = seed.users
+    changed = true
+  }
+  if (!current.rooms.length) {
+    current.rooms = seed.rooms
+    changed = true
+  }
+  if (!current.spaces.length) {
+    current.spaces = seed.spaces
+    changed = true
+  }
+  if (!current.testimonials.length) {
+    current.testimonials = seed.testimonials
+    changed = true
+  }
+
+  if (changed) {
+    const connection = await db.getConnection()
+
+    try {
+      await writeWholeDb(connection, current)
+    } finally {
+      connection.release()
     }
-  } finally {
-    db.close()
   }
 }
 
-export function readDb() {
-  const db = openDb()
-
-  try {
-    return {
-      users: parseRows(db.prepare('SELECT data FROM users ORDER BY id ASC').all()),
-      rooms: parseRows(db.prepare('SELECT data FROM rooms ORDER BY id DESC').all()),
-      spaces: parseRows(db.prepare('SELECT data FROM spaces ORDER BY id DESC').all()),
-      reservations: parseRows(db.prepare('SELECT data FROM reservations ORDER BY id DESC').all()),
-      payments: parseRows(db.prepare('SELECT data FROM payments ORDER BY id DESC').all()),
-      testimonials: parseRows(db.prepare('SELECT data FROM testimonials ORDER BY id DESC').all()),
-    }
-  } finally {
-    db.close()
-  }
+export async function readDb() {
+  const db = await getPool()
+  return loadSnapshot(db)
 }
 
-export function withDb(mutator) {
-  const db = openDb()
+export async function withDb(mutator) {
+  const db = await getPool()
+  const snapshot = await loadSnapshot(db)
+  const result = await mutator(snapshot)
+  const connection = await db.getConnection()
 
   try {
-    const snapshot = {
-      users: parseRows(db.prepare('SELECT data FROM users ORDER BY id ASC').all()),
-      rooms: parseRows(db.prepare('SELECT data FROM rooms ORDER BY id DESC').all()),
-      spaces: parseRows(db.prepare('SELECT data FROM spaces ORDER BY id DESC').all()),
-      reservations: parseRows(db.prepare('SELECT data FROM reservations ORDER BY id DESC').all()),
-      payments: parseRows(db.prepare('SELECT data FROM payments ORDER BY id DESC').all()),
-      testimonials: parseRows(db.prepare('SELECT data FROM testimonials ORDER BY id DESC').all()),
-    }
-
-    const result = mutator(snapshot)
-    writeWholeDb(db, snapshot)
-    return result
+    await writeWholeDb(connection, snapshot)
   } finally {
-    db.close()
+    connection.release()
   }
+
+  return result
 }
 
 function nextId(collection) {
@@ -295,4 +401,4 @@ function nextId(collection) {
   return maxId + 1
 }
 
-export { DB_FILE, nextId }
+export { nextId }

@@ -11,7 +11,7 @@ export function SiteDataProvider({ children }) {
   const [spaces, setSpaces] = useState([])
   const [offers, setOffers] = useState(defaultOffers)
   const [testimonials, setTestimonials] = useState(defaultTestimonials)
-  const [contacts] = useState([])
+  const [contacts, setContacts] = useState([])
   const [newsletters, setNewsletters] = useState([])
   const [authToken, setAuthToken] = useState(() => localStorage.getItem(TOKEN_KEY) || '')
   const [user, setUser] = useState(null)
@@ -175,10 +175,18 @@ export function SiteDataProvider({ children }) {
       )))
       return data
     },
-    addNewsletter(email) {
-      const entry = { id: Date.now(), email, createdAt: new Date().toISOString() }
-      setNewsletters((current) => [entry, ...current])
-      return entry
+    async submitNewsletter(email) {
+      const data = await apiPost('/api/newsletters', { email, consent: true })
+      setNewsletters((current) => {
+        const withoutSameEmail = current.filter((item) => item.email !== data.newsletter.email)
+        return [data.newsletter, ...withoutSameEmail]
+      })
+      return data
+    },
+    async submitContact(payload) {
+      const data = await apiPost('/api/contacts', payload)
+      setContacts((current) => [data.contact, ...current])
+      return data.contact
     },
     async addRoom(payload) {
       if (!authToken) throw new Error('Connexion admin requise.')

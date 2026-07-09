@@ -6,7 +6,7 @@ import { ensureDb, nextId, readDb, withDb } from './lib/store.js'
 import { createPayGatePayment } from './lib/paygate.js'
 import { requireAuth, requireRole, sanitizeUser, signToken } from './lib/auth.js'
 
-ensureDb()
+await ensureDb()
 
 const app = express()
 const PORT = Number(process.env.PORT || 4000)
@@ -14,6 +14,19 @@ const APP_URL = process.env.APP_URL || 'http://localhost:5173'
 
 app.use(cors({ origin: APP_URL, credentials: false }))
 app.use(express.json({ limit: '10mb' }))
+
+app.get('/', async (_req, res) => {
+  res.json({
+    ok: true,
+    service: 'hotel-le-morphee-api',
+    message: 'API Hotel Le Morphee OK',
+    docs: {
+      health: '/api/health',
+      rooms: '/api/rooms',
+      spaces: '/api/spaces',
+    },
+  })
+})
 
 function cancelReservationInDraft(draft, reservationId, actor = 'client') {
   const reservation = draft.reservations.find((item) => Number(item.id) === Number(reservationId))
@@ -50,6 +63,33 @@ function getReservationAmount(reservation, db) {
   }
 
   return 0
+}
+
+function normalizePaymentStatus(value) {
+  const status = String(value || '').trim().toLowerCase()
+
+  if (['completed', 'success', 'successful', 'paid'].includes(status)) return 'completed'
+  if (['failed', 'error', 'rejected'].includes(status)) return 'failed'
+  if (['canceled', 'cancelled'].includes(status)) return 'canceled'
+  if (['pending', 'processing', 'initiated'].includes(status)) return 'pending'
+  return 'pending'
+}
+
+function applyPaymentStatusInDraft(draft, reference, status) {
+  const payment = draft.payments.find((item) => item.reference === reference)
+  if (!payment) return null
+
+  payment.status = status
+  payment.updatedAt = new Date().toISOString()
+
+  const reservation = draft.reservations.find((item) => Number(item.id) === Number(payment.reservationId))
+  if (reservation) {
+    reservation.paymentStatus = status
+    reservation.status = status === 'completed' ? 'confirmed' : reservation.status
+    reservation.updatedAt = new Date().toISOString()
+  }
+
+  return payment
 }
 
 function buildRoomReservation(req, db) {
@@ -130,11 +170,11 @@ function buildSpaceReservation(req, db) {
   }
 }
 
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, service: 'hotel-le-morphee-api', mode: process.env.PAYMENT_MODE || 'mock', storage: 'sqlite' })
+app.get('/api/health', async (_req, res) => {
+  res.json({ ok: true, service: 'hotel-le-morphee-api', mode: process.env.PAYMENT_MODE || 'mock', storage: 'mysql' })
 })
 
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const { name, email, password } = req.body || {}
 
   if (!name?.trim() || !email?.trim() || !password?.trim()) {
@@ -142,14 +182,14 @@ app.post('/api/auth/register', (req, res) => {
   }
 
   const normalizedEmail = email.trim().toLowerCase()
-  const db = readDb()
+  const db = await readDb()
   const existing = db.users.find((user) => user.email.toLowerCase() === normalizedEmail)
 
   if (existing) {
     return res.status(409).json({ message: 'Un compte existe déjà avec cet email.' })
   }
 
-  const user = withDb((draft) => {
+  const user = await withDb((draft) => {
     const created = {
       id: nextId(draft.users),
       name: name.trim(),
@@ -167,14 +207,14 @@ app.post('/api/auth/register', (req, res) => {
   res.status(201).json({ token, user: sanitizeUser(user) })
 })
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body || {}
 
   if (!email?.trim() || !password?.trim()) {
     return res.status(400).json({ message: 'Email et mot de passe sont obligatoires.' })
   }
 
-  const db = readDb()
+  const db = await readDb()
   const user = db.users.find((item) => item.email.toLowerCase() === email.trim().toLowerCase())
 
   if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
@@ -185,8 +225,8 @@ app.post('/api/auth/login', (req, res) => {
   res.json({ token, user: sanitizeUser(user) })
 })
 
-app.get('/api/auth/me', requireAuth, (req, res) => {
-  const db = readDb()
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  const db = await readDb()
   const user = db.users.find((item) => Number(item.id) === Number(req.auth.sub))
 
   if (!user) {
@@ -196,29 +236,98 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json({ user: sanitizeUser(user) })
 })
 
-app.get('/api/rooms', (_req, res) => {
-  const db = readDb()
+app.get('/api/rooms', async (_req, res) => {
+  const db = await readDb()
   res.json({ rooms: db.rooms })
 })
 
-app.get('/api/spaces', (_req, res) => {
-  const db = readDb()
+app.get('/api/spaces', async (_req, res) => {
+  const db = await readDb()
   res.json({ spaces: db.spaces })
 })
 
-app.get('/api/testimonials', (_req, res) => {
-  const db = readDb()
+app.get('/api/testimonials', async (_req, res) => {
+  const db = await readDb()
   res.json({ testimonials: db.testimonials })
 })
 
-app.post('/api/admin/rooms', requireAuth, requireRole('admin'), (req, res) => {
+app.post('/api/newsletters', async (req, res) => {
+  const { email, consent = false } = req.body || {}
+
+  if (!consent) {
+    return res.status(400).json({ message: "Le consentement est requis pour l'inscription." })
+  }
+
+  if (!email?.trim()) {
+    return res.status(400).json({ message: "L'email est obligatoire." })
+  }
+
+  const normalizedEmail = email.trim().toLowerCase()
+  const db = await readDb()
+  const existing = db.newsletters.find((item) => item.email?.toLowerCase() === normalizedEmail)
+
+  if (existing) {
+    return res.json({ newsletter: existing, created: false })
+  }
+
+  const newsletter = await withDb((draft) => {
+    const created = {
+      id: nextId(draft.newsletters),
+      email: normalizedEmail,
+      consent: true,
+      status: 'subscribed',
+      source: 'website',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    draft.newsletters.unshift(created)
+    return created
+  })
+
+  res.status(201).json({ newsletter, created: true })
+})
+
+app.post('/api/contacts', async (req, res) => {
+  const { name, email, phone = '', message, consent = false } = req.body || {}
+
+  if (!name?.trim() || !email?.trim() || !message?.trim()) {
+    return res.status(400).json({ message: 'Nom, email et message sont obligatoires.' })
+  }
+
+  if (!consent) {
+    return res.status(400).json({ message: 'Le consentement est requis pour envoyer ce message.' })
+  }
+
+  const contact = await withDb((draft) => {
+    const created = {
+      id: nextId(draft.contacts),
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone.trim() || null,
+      message: message.trim(),
+      consent: true,
+      status: 'new',
+      source: 'website',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    draft.contacts.unshift(created)
+    return created
+  })
+
+  res.status(201).json({ contact })
+})
+
+app.post('/api/admin/rooms', requireAuth, requireRole('admin'), async (req, res) => {
   const payload = req.body || {}
 
   if (!payload.name?.fr?.trim() || !payload.image?.trim()) {
     return res.status(400).json({ message: 'Le nom français et l’image principale sont obligatoires.' })
   }
 
-  const room = withDb((draft) => {
+  const room = await withDb((draft) => {
     const created = {
       id: nextId(draft.rooms),
       slug: payload.slug || `room-${Date.now()}`,
@@ -243,11 +352,11 @@ app.post('/api/admin/rooms', requireAuth, requireRole('admin'), (req, res) => {
   res.status(201).json({ room })
 })
 
-app.put('/api/admin/rooms/:id', requireAuth, requireRole('admin'), (req, res) => {
+app.put('/api/admin/rooms/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const roomId = Number(req.params.id)
   const payload = req.body || {}
 
-  const room = withDb((draft) => {
+  const room = await withDb((draft) => {
     const current = draft.rooms.find((item) => Number(item.id) === roomId)
     if (!current) return null
 
@@ -262,10 +371,10 @@ app.put('/api/admin/rooms/:id', requireAuth, requireRole('admin'), (req, res) =>
   res.json({ room })
 })
 
-app.delete('/api/admin/rooms/:id', requireAuth, requireRole('admin'), (req, res) => {
+app.delete('/api/admin/rooms/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const roomId = Number(req.params.id)
 
-  const deleted = withDb((draft) => {
+  const deleted = await withDb((draft) => {
     const index = draft.rooms.findIndex((item) => Number(item.id) === roomId)
     if (index < 0) return null
     return draft.rooms.splice(index, 1)[0]
@@ -278,14 +387,14 @@ app.delete('/api/admin/rooms/:id', requireAuth, requireRole('admin'), (req, res)
   res.json({ ok: true })
 })
 
-app.post('/api/admin/spaces', requireAuth, requireRole('admin'), (req, res) => {
+app.post('/api/admin/spaces', requireAuth, requireRole('admin'), async (req, res) => {
   const payload = req.body || {}
 
   if (!payload.title?.fr?.trim() || !payload.image?.trim()) {
     return res.status(400).json({ message: 'Le titre français et l’image principale sont obligatoires.' })
   }
 
-  const space = withDb((draft) => {
+  const space = await withDb((draft) => {
     const created = {
       id: nextId(draft.spaces),
       slug: payload.slug || `space-${Date.now()}`,
@@ -307,11 +416,11 @@ app.post('/api/admin/spaces', requireAuth, requireRole('admin'), (req, res) => {
   res.status(201).json({ space })
 })
 
-app.put('/api/admin/spaces/:id', requireAuth, requireRole('admin'), (req, res) => {
+app.put('/api/admin/spaces/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const spaceId = Number(req.params.id)
   const payload = req.body || {}
 
-  const space = withDb((draft) => {
+  const space = await withDb((draft) => {
     const current = draft.spaces.find((item) => Number(item.id) === spaceId)
     if (!current) return null
 
@@ -326,10 +435,10 @@ app.put('/api/admin/spaces/:id', requireAuth, requireRole('admin'), (req, res) =
   res.json({ space })
 })
 
-app.delete('/api/admin/spaces/:id', requireAuth, requireRole('admin'), (req, res) => {
+app.delete('/api/admin/spaces/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const spaceId = Number(req.params.id)
 
-  const deleted = withDb((draft) => {
+  const deleted = await withDb((draft) => {
     const index = draft.spaces.findIndex((item) => Number(item.id) === spaceId)
     if (index < 0) return null
     return draft.spaces.splice(index, 1)[0]
@@ -342,14 +451,14 @@ app.delete('/api/admin/spaces/:id', requireAuth, requireRole('admin'), (req, res
   res.json({ ok: true })
 })
 
-app.post('/api/admin/testimonials', requireAuth, requireRole('admin'), (req, res) => {
+app.post('/api/admin/testimonials', requireAuth, requireRole('admin'), async (req, res) => {
   const payload = req.body || {}
 
   if (!payload.name?.trim() || !payload.text?.fr?.trim()) {
     return res.status(400).json({ message: 'Le nom et le texte français de l’avis sont obligatoires.' })
   }
 
-  const testimonial = withDb((draft) => {
+  const testimonial = await withDb((draft) => {
     const created = {
       id: nextId(draft.testimonials),
       name: payload.name.trim(),
@@ -366,11 +475,11 @@ app.post('/api/admin/testimonials', requireAuth, requireRole('admin'), (req, res
   res.status(201).json({ testimonial })
 })
 
-app.put('/api/admin/testimonials/:id', requireAuth, requireRole('admin'), (req, res) => {
+app.put('/api/admin/testimonials/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const testimonialId = Number(req.params.id)
   const payload = req.body || {}
 
-  const testimonial = withDb((draft) => {
+  const testimonial = await withDb((draft) => {
     const current = draft.testimonials.find((item) => Number(item.id) === testimonialId)
     if (!current) return null
 
@@ -385,10 +494,10 @@ app.put('/api/admin/testimonials/:id', requireAuth, requireRole('admin'), (req, 
   res.json({ testimonial })
 })
 
-app.delete('/api/admin/testimonials/:id', requireAuth, requireRole('admin'), (req, res) => {
+app.delete('/api/admin/testimonials/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const testimonialId = Number(req.params.id)
 
-  const deleted = withDb((draft) => {
+  const deleted = await withDb((draft) => {
     const index = draft.testimonials.findIndex((item) => Number(item.id) === testimonialId)
     if (index < 0) return null
     return draft.testimonials.splice(index, 1)[0]
@@ -401,22 +510,22 @@ app.delete('/api/admin/testimonials/:id', requireAuth, requireRole('admin'), (re
   res.json({ ok: true })
 })
 
-app.get('/api/me/reservations', requireAuth, (req, res) => {
-  const db = readDb()
+app.get('/api/me/reservations', requireAuth, async (req, res) => {
+  const db = await readDb()
   const reservations = db.reservations.filter((item) => Number(item.userId) === Number(req.auth.sub))
   res.json({ reservations })
 })
 
-app.post('/api/me/reservations/:id/cancel', requireAuth, (req, res) => {
+app.post('/api/me/reservations/:id/cancel', requireAuth, async (req, res) => {
   const reservationId = Number(req.params.id)
-  const currentDb = readDb()
+  const currentDb = await readDb()
   const ownedReservation = currentDb.reservations.find((item) => Number(item.id) === reservationId && Number(item.userId) === Number(req.auth.sub))
 
   if (!ownedReservation) {
     return res.status(404).json({ message: 'Réservation introuvable.' })
   }
 
-  const result = withDb((draft) => cancelReservationInDraft(draft, reservationId, 'client'))
+  const result = await withDb((draft) => cancelReservationInDraft(draft, reservationId, 'client'))
 
   if (result?.error) {
     return res.status(result.status || 400).json({ message: result.error })
@@ -425,20 +534,33 @@ app.post('/api/me/reservations/:id/cancel', requireAuth, (req, res) => {
   res.json({ reservation: result.reservation })
 })
 
-app.get('/api/me/payments', requireAuth, (req, res) => {
-  const db = readDb()
+app.get('/api/me/payments', requireAuth, async (req, res) => {
+  const db = await readDb()
   const payments = db.payments.filter((item) => Number(item.userId) === Number(req.auth.sub))
   res.json({ payments })
 })
 
-app.get('/api/admin/reservations', requireAuth, requireRole('admin'), (_req, res) => {
-  const db = readDb()
+app.get('/api/me/payments/:reference', requireAuth, async (req, res) => {
+  const reference = String(req.params.reference || '')
+  const db = await readDb()
+  const payment = db.payments.find((item) => item.reference === reference && Number(item.userId) === Number(req.auth.sub))
+
+  if (!payment) {
+    return res.status(404).json({ message: 'Paiement introuvable.' })
+  }
+
+  const reservation = db.reservations.find((item) => Number(item.id) === Number(payment.reservationId) && Number(item.userId) === Number(req.auth.sub))
+  res.json({ payment, reservation: reservation || null })
+})
+
+app.get('/api/admin/reservations', requireAuth, requireRole('admin'), async (_req, res) => {
+  const db = await readDb()
   res.json({ reservations: db.reservations })
 })
 
-app.post('/api/admin/reservations/:id/cancel', requireAuth, requireRole('admin'), (req, res) => {
+app.post('/api/admin/reservations/:id/cancel', requireAuth, requireRole('admin'), async (req, res) => {
   const reservationId = Number(req.params.id)
-  const result = withDb((draft) => cancelReservationInDraft(draft, reservationId, 'admin'))
+  const result = await withDb((draft) => cancelReservationInDraft(draft, reservationId, 'admin'))
 
   if (result?.error) {
     return res.status(result.status || 400).json({ message: result.error })
@@ -447,20 +569,47 @@ app.post('/api/admin/reservations/:id/cancel', requireAuth, requireRole('admin')
   res.json({ reservation: result.reservation })
 })
 
-app.get('/api/admin/payments', requireAuth, requireRole('admin'), (_req, res) => {
-  const db = readDb()
+app.get('/api/admin/payments', requireAuth, requireRole('admin'), async (_req, res) => {
+  const db = await readDb()
   res.json({ payments: db.payments })
 })
 
-app.post('/api/reservations', requireAuth, (req, res) => {
-  const db = readDb()
+app.post('/api/admin/payments/:reference/simulate', requireAuth, requireRole('admin'), async (req, res) => {
+  const reference = String(req.params.reference || '')
+  const status = normalizePaymentStatus(req.body?.status || 'completed')
+
+  if (!reference) {
+    return res.status(400).json({ message: 'Référence de paiement manquante.' })
+  }
+
+  const updated = await withDb((draft) => applyPaymentStatusInDraft(draft, reference, status))
+
+  if (!updated) {
+    return res.status(404).json({ message: 'Paiement introuvable.' })
+  }
+
+  res.json({ payment: updated })
+})
+
+app.get('/api/admin/contacts', requireAuth, requireRole('admin'), async (_req, res) => {
+  const db = await readDb()
+  res.json({ contacts: db.contacts })
+})
+
+app.get('/api/admin/newsletters', requireAuth, requireRole('admin'), async (_req, res) => {
+  const db = await readDb()
+  res.json({ newsletters: db.newsletters })
+})
+
+app.post('/api/reservations', requireAuth, async (req, res) => {
+  const db = await readDb()
   const built = buildRoomReservation(req, db)
 
   if (built.error) {
     return res.status(built.status || 400).json({ message: built.error })
   }
 
-  const reservation = withDb((draft) => {
+  const reservation = await withDb((draft) => {
     const created = {
       id: nextId(draft.reservations),
       ...built.reservation,
@@ -473,15 +622,15 @@ app.post('/api/reservations', requireAuth, (req, res) => {
   res.status(201).json({ reservation })
 })
 
-app.post('/api/reservations/rooms', requireAuth, (req, res) => {
-  const db = readDb()
+app.post('/api/reservations/rooms', requireAuth, async (req, res) => {
+  const db = await readDb()
   const built = buildRoomReservation(req, db)
 
   if (built.error) {
     return res.status(built.status || 400).json({ message: built.error })
   }
 
-  const reservation = withDb((draft) => {
+  const reservation = await withDb((draft) => {
     const created = {
       id: nextId(draft.reservations),
       ...built.reservation,
@@ -494,15 +643,15 @@ app.post('/api/reservations/rooms', requireAuth, (req, res) => {
   res.status(201).json({ reservation })
 })
 
-app.post('/api/reservations/spaces', requireAuth, (req, res) => {
-  const db = readDb()
+app.post('/api/reservations/spaces', requireAuth, async (req, res) => {
+  const db = await readDb()
   const built = buildSpaceReservation(req, db)
 
   if (built.error) {
     return res.status(built.status || 400).json({ message: built.error })
   }
 
-  const reservation = withDb((draft) => {
+  const reservation = await withDb((draft) => {
     const created = {
       id: nextId(draft.reservations),
       ...built.reservation,
@@ -517,7 +666,7 @@ app.post('/api/reservations/spaces', requireAuth, (req, res) => {
 
 app.post('/api/payments/paygate/initiate', requireAuth, async (req, res) => {
   const { reservationId, provider = 'flooz', phone, amount } = req.body || {}
-  const db = readDb()
+  const db = await readDb()
   const reservation = db.reservations.find((item) => Number(item.id) === Number(reservationId) && Number(item.userId) === Number(req.auth.sub))
 
   if (!reservation) {
@@ -540,7 +689,7 @@ app.post('/api/payments/paygate/initiate', requireAuth, async (req, res) => {
     return res.status(503).json(result)
   }
 
-  const payment = withDb((draft) => {
+  const payment = await withDb((draft) => {
     const created = {
       id: nextId(draft.payments),
       userId: Number(req.auth.sub),
@@ -573,37 +722,28 @@ app.post('/api/payments/paygate/initiate', requireAuth, async (req, res) => {
   res.status(201).json({ payment, checkoutUrl: result.checkoutUrl || null, mode: process.env.PAYMENT_MODE || 'mock' })
 })
 
-app.post('/api/payments/callback/paygate', (req, res) => {
-  const { reference, status = 'completed' } = req.body || {}
+async function handlePayGateCallback(req, res) {
+  const payload = req.method === 'GET' ? (req.query || {}) : (req.body || {})
+  const reference = payload.reference || payload.payment_reference || payload.tx_reference || payload.identifier
+  const status = normalizePaymentStatus(payload.status || payload.payment_status || 'completed')
 
   if (!reference) {
     return res.status(400).json({ message: 'Référence de paiement manquante.' })
   }
 
-  const updated = withDb((draft) => {
-    const payment = draft.payments.find((item) => item.reference === reference)
-    if (!payment) return null
-
-    payment.status = status
-    payment.updatedAt = new Date().toISOString()
-
-    const reservation = draft.reservations.find((item) => Number(item.id) === Number(payment.reservationId))
-    if (reservation) {
-      reservation.paymentStatus = status
-      reservation.status = status === 'completed' ? 'confirmed' : reservation.status
-      reservation.updatedAt = new Date().toISOString()
-    }
-
-    return payment
-  })
+  const updated = await withDb((draft) => applyPaymentStatusInDraft(draft, reference, status))
 
   if (!updated) {
     return res.status(404).json({ message: 'Paiement introuvable.' })
   }
 
   res.json({ ok: true })
-})
+}
+
+app.get('/api/payments/callback/paygate', handlePayGateCallback)
+app.post('/api/payments/callback/paygate', handlePayGateCallback)
 
 app.listen(PORT, () => {
   console.log(`Hotel Le Morphee API listening on http://localhost:${PORT}`)
 })
+

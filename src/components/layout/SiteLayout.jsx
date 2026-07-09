@@ -9,8 +9,9 @@ import Navbar from './Navbar'
 export default function SiteLayout() {
   const navigate = useNavigate()
   const { language } = useLanguage()
-  const { adminSession, logout, addNewsletter } = useSiteData()
+  const { adminSession, logout, submitNewsletter } = useSiteData()
   const [newsletterEmail, setNewsletterEmail] = useState('')
+  const [newsletterConsent, setNewsletterConsent] = useState(false)
   const [newsletterMessage, setNewsletterMessage] = useState('')
 
   const bookNow = useMemo(
@@ -25,7 +26,7 @@ export default function SiteLayout() {
     [navigate],
   )
 
-  const handleNewsletterSubmit = (event) => {
+  const handleNewsletterSubmit = async (event) => {
     event.preventDefault()
 
     if (!newsletterEmail.trim() || !newsletterEmail.includes('@')) {
@@ -33,9 +34,21 @@ export default function SiteLayout() {
       return
     }
 
-    addNewsletter(newsletterEmail.trim())
-    setNewsletterEmail('')
-    setNewsletterMessage(language === 'fr' ? 'Email enregistre localement.' : 'Email saved locally.')
+    if (!newsletterConsent) {
+      setNewsletterMessage(language === 'fr' ? 'Merci de confirmer votre accord.' : 'Please confirm your consent.')
+      return
+    }
+
+    try {
+      const result = await submitNewsletter(newsletterEmail.trim())
+      setNewsletterEmail('')
+      setNewsletterConsent(false)
+      setNewsletterMessage(result.created
+        ? (language === 'fr' ? 'Inscription enregistree.' : 'Subscription saved.')
+        : (language === 'fr' ? 'Cet email est deja inscrit.' : 'This email is already subscribed.'))
+    } catch (error) {
+      setNewsletterMessage(error.message)
+    }
   }
 
   return (
@@ -45,6 +58,8 @@ export default function SiteLayout() {
       <Footer
         newsletterEmail={newsletterEmail}
         setNewsletterEmail={setNewsletterEmail}
+        newsletterConsent={newsletterConsent}
+        setNewsletterConsent={setNewsletterConsent}
         onNewsletterSubmit={handleNewsletterSubmit}
         newsletterMessage={newsletterMessage}
       />

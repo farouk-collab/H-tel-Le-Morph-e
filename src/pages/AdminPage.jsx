@@ -1,8 +1,18 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { BedDouble, Bell, CalendarDays, CreditCard, Inbox, LayoutDashboard, MessageSquareQuote, Settings2, Sparkles } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Footer from '../components/layout/Footer'
-import Navbar from '../components/layout/Navbar'
-import SectionTitle from '../components/ui/SectionTitle'
+import AdminContentPanel from '../components/admin/AdminContentPanel'
+import AdminInboxPanel from '../components/admin/AdminInboxPanel'
+import AdminLoginCard from '../components/admin/AdminLoginCard'
+import AdminNotificationsPanel from '../components/admin/AdminNotificationsPanel'
+import AdminOverviewPanel from '../components/admin/AdminOverviewPanel'
+import AdminOperationsPanel from '../components/admin/AdminOperationsPanel'
+import AdminPaymentsPanel from '../components/admin/AdminPaymentsPanel'
+import AdminRoomsPanel from '../components/admin/AdminRoomsPanel'
+import AdminSettingsPanel from '../components/admin/AdminSettingsPanel'
+import AdminSidebar from '../components/admin/AdminSidebar'
+import AdminSpacesPanel from '../components/admin/AdminSpacesPanel'
+import AdminTopbar from '../components/admin/AdminTopbar'
 import { useSiteData } from '../context/SiteDataContext'
 import { apiGet, apiPost } from '../lib/api'
 
@@ -53,6 +63,18 @@ function readFileAsDataUrl(file) {
   })
 }
 
+function formatRelativeDate(value) {
+  if (!value) return 'A l instant'
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'A l instant'
+
+  return new Intl.DateTimeFormat('fr-FR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(date)
+}
+
 function emptyRoomForm() {
   return {
     id: null,
@@ -90,84 +112,22 @@ function emptySpaceForm() {
   }
 }
 
-function FormImageGallery({ images, mainImage, onRemove, emptyText }) {
-  if (!images.length) {
-    return <p className="text-xs leading-6 text-black/45">{emptyText}</p>
+function emptyTestimonialForm() {
+  return {
+    id: null,
+    name: '',
+    roleFr: '',
+    roleEn: '',
+    textFr: '',
+    textEn: '',
   }
-
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {images.map((image, index) => {
-        const isMain = image === mainImage
-
-        return (
-          <div key={`${image}-${index}`} className="overflow-hidden rounded-[24px] border border-black/10 bg-[#fbf6f4]">
-            <img src={image} alt="Aperçu" className="h-32 w-full object-cover" />
-            <div className="flex items-center justify-between gap-3 p-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-black/45">{isMain ? 'Image principale' : 'Galerie'}</p>
-                <p className="mt-1 truncate text-xs text-black/60">{image.startsWith('data:image') ? 'Image téléversée' : image}</p>
-              </div>
-              <button type="button" onClick={() => onRemove(image)} className="rounded-full border border-red-200 px-3 py-2 text-xs font-semibold text-red-600">
-                Supprimer
-              </button>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
 }
 
-function AdminLoginCard() {
-  const { login, loading } = useSiteData()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    const result = await login(email, password)
-
-    if (!result.ok) {
-      setError(result.message)
-      return
-    }
-
-    setError('')
+function emptyPaymentSimulationForm() {
+  return {
+    reference: '',
+    status: 'completed',
   }
-
-  return (
-    <section className="section-wrap py-16">
-      <div className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[0.95fr_1.05fr]">
-        <div className="rounded-[32px] bg-[#7a2230] p-8 text-white shadow-2xl shadow-black/10">
-          <SectionTitle eyebrow="Admin" title="Connexion à l’administration" text="Cet accès s’appuie désormais sur l’API locale du projet, avec stockage serveur des données sensibles." />
-          <div className="mt-8 rounded-[24px] border border-white/15 bg-white/10 p-5 text-sm leading-7 text-white/80">
-            Compte initial : <strong>hotellemorphee8@gmail.com</strong> / <strong>admin123</strong>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="rounded-[32px] bg-white p-8 shadow-2xl shadow-black/10">
-          <p className="text-xs uppercase tracking-[0.35em] text-black/45">Back-office</p>
-          <h2 className="mt-3 font-serif text-4xl text-[#171717]">Bienvenue</h2>
-          <div className="mt-8 grid gap-5">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-black/80">Email</label>
-              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="h-12 w-full rounded-2xl border border-black/10 px-4" />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-black/80">Mot de passe</label>
-              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="h-12 w-full rounded-2xl border border-black/10 px-4" />
-            </div>
-            {error ? <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div> : null}
-            <button type="submit" disabled={loading} className="rounded-2xl bg-[#7a2230] py-3 text-sm font-semibold text-white disabled:opacity-60">
-              {loading ? 'Connexion...' : 'Se connecter'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </section>
-  )
 }
 
 const HOTEL_FACTS = {
@@ -176,41 +136,196 @@ const HOTEL_FACTS = {
   airConditionedRooms: 11,
   eventSpaceCount: 3,
 }
+const NOTIFICATION_READ_KEY = 'hotel_morphee_admin_notifications_read'
 
 function AdminDashboard() {
   const navigate = useNavigate()
-  const { user, authToken, logout, rooms, spaces, addRoom, updateRoom, deleteRoom, addSpace, updateSpace, deleteSpace } = useSiteData()
+  const {
+    user,
+    authToken,
+    logout,
+    rooms,
+    spaces,
+    testimonials,
+    addRoom,
+    updateRoom,
+    deleteRoom,
+    addSpace,
+    updateSpace,
+    deleteSpace,
+    addTestimonial,
+    updateTestimonial,
+    deleteTestimonial,
+  } = useSiteData()
+
+  const [activeSection, setActiveSection] = useState('overview')
   const [roomForm, setRoomForm] = useState(emptyRoomForm())
   const [spaceForm, setSpaceForm] = useState(emptySpaceForm())
+  const [testimonialForm, setTestimonialForm] = useState(emptyTestimonialForm())
+  const [paymentSimulationForm, setPaymentSimulationForm] = useState(emptyPaymentSimulationForm())
   const [adminReservations, setAdminReservations] = useState([])
   const [adminPayments, setAdminPayments] = useState([])
+  const [adminContacts, setAdminContacts] = useState([])
+  const [adminNewsletters, setAdminNewsletters] = useState([])
   const [flash, setFlash] = useState('')
   const [isUploadingRoomImages, setIsUploadingRoomImages] = useState(false)
   const [isUploadingSpaceImages, setIsUploadingSpaceImages] = useState(false)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [readNotificationIds, setReadNotificationIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem(NOTIFICATION_READ_KEY)
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
 
   const roomFormImages = useMemo(() => getFormImages(roomForm), [roomForm])
   const spaceFormImages = useMemo(() => getFormImages(spaceForm), [spaceForm])
 
+  const navItems = [
+    { id: 'overview', label: 'Vue generale', icon: LayoutDashboard },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'rooms', label: 'Chambres', icon: BedDouble },
+    { id: 'spaces', label: 'Salles', icon: Sparkles },
+    { id: 'content', label: 'Temoignages', icon: MessageSquareQuote },
+    { id: 'operations', label: 'Reservations', icon: CalendarDays },
+    { id: 'payments', label: 'Paiements', icon: CreditCard },
+    { id: 'inbox', label: 'Messages', icon: Inbox },
+    { id: 'settings', label: 'Pilotage', icon: Settings2 },
+  ]
+
+  const activeSectionLabel = navItems.find((item) => item.id === activeSection)?.label || 'Vue generale'
+
   const stats = useMemo(() => ([
-    { label: 'Chambres', value: HOTEL_FACTS.roomCount, hint: `${rooms.length} types gérés (${HOTEL_FACTS.airConditionedRooms} climatisées, ${HOTEL_FACTS.ventilatedRooms} ventilées)` },
-    { label: 'Salles & espaces', value: HOTEL_FACTS.eventSpaceCount, hint: '5 espaces/services gérés dans l’admin' },
-    { label: 'Réservations', value: adminReservations.length, hint: 'Chambres et salles confondues' },
-    { label: 'Paiements', value: adminPayments.length, hint: 'Transactions enregistrées' },
-  ]), [rooms.length, spaces.length, adminReservations.length, adminPayments.length])
+    {
+      label: 'Chambres',
+      value: HOTEL_FACTS.roomCount,
+      hint: `${rooms.length} types geres (${HOTEL_FACTS.airConditionedRooms} climatisees, ${HOTEL_FACTS.ventilatedRooms} ventilees)`,
+      icon: BedDouble,
+      accent: 'bg-[linear-gradient(135deg,#7a2230,#c58b95)]',
+    },
+    {
+      label: 'Salles',
+      value: HOTEL_FACTS.eventSpaceCount,
+      hint: `${spaces.length} espaces disponibles au dashboard`,
+      icon: Sparkles,
+      accent: 'bg-[linear-gradient(135deg,#94515d,#d6a2aa)]',
+    },
+    {
+      label: 'Reservations',
+      value: adminReservations.length,
+      hint: 'Chambres et salles confondues',
+      icon: CalendarDays,
+      accent: 'bg-[linear-gradient(135deg,#6b1f2b,#b76e79)]',
+    },
+    {
+      label: 'Messages',
+      value: adminContacts.length + adminNewsletters.length,
+      hint: `${adminContacts.length} contacts et ${adminNewsletters.length} inscriptions`,
+      icon: Inbox,
+      accent: 'bg-[linear-gradient(135deg,#8b3b49,#e2b3ba)]',
+    },
+  ]), [rooms.length, spaces.length, adminReservations.length, adminContacts.length, adminNewsletters.length])
+
+  useEffect(() => {
+    localStorage.setItem(NOTIFICATION_READ_KEY, JSON.stringify(readNotificationIds))
+  }, [readNotificationIds])
+
+  const notifications = useMemo(() => {
+    const fromReservations = adminReservations.slice(0, 8).map((reservation) => ({
+      id: `reservation-${reservation.id}`,
+      category: 'Reservation',
+      targetSection: 'operations',
+      actionLabel: 'Voir la reservation',
+      tone: reservation.status === 'canceled' ? 'danger' : reservation.paymentStatus === 'pending' ? 'warning' : 'success',
+      isUnread: !readNotificationIds.includes(`reservation-${reservation.id}`),
+      title: reservation.status === 'canceled'
+        ? 'Reservation annulee'
+        : reservation.paymentStatus === 'completed'
+          ? 'Reservation confirmee'
+          : 'Nouvelle reservation a suivre',
+      description: `${reservation.userName || reservation.userEmail || 'Client'} - ${reservation.roomName || reservation.spaceName || 'Reservation'}${reservation.checkIn ? ` (${reservation.checkIn} au ${reservation.checkOut})` : reservation.eventDate ? ` (${reservation.eventDate})` : ''}`,
+      when: reservation.updatedAt || reservation.createdAt,
+      whenLabel: formatRelativeDate(reservation.updatedAt || reservation.createdAt),
+    }))
+
+    const fromPayments = adminPayments.slice(0, 8).map((payment) => ({
+      id: `payment-${payment.id}`,
+      category: 'Paiement',
+      targetSection: 'payments',
+      actionLabel: payment.status === 'pending' ? 'Traiter le paiement' : 'Voir le paiement',
+      tone: payment.status === 'completed' ? 'success' : payment.status === 'failed' ? 'danger' : 'warning',
+      isUnread: !readNotificationIds.includes(`payment-${payment.id}`),
+      title: payment.status === 'completed'
+        ? 'Paiement recu'
+        : payment.status === 'failed'
+          ? 'Paiement echoue'
+          : 'Paiement en attente',
+      description: `${payment.reference} - ${Number(payment.amount || 0).toLocaleString('fr-FR')} XOF via ${payment.provider || 'PayGate'}`,
+      when: payment.updatedAt || payment.createdAt,
+      whenLabel: formatRelativeDate(payment.updatedAt || payment.createdAt),
+    }))
+
+    const fromContacts = adminContacts.slice(0, 8).map((contact) => ({
+      id: `contact-${contact.id}`,
+      category: 'Message',
+      targetSection: 'inbox',
+      actionLabel: 'Lire le message',
+      tone: 'default',
+      isUnread: !readNotificationIds.includes(`contact-${contact.id}`),
+      title: 'Nouveau message de contact',
+      description: `${contact.name || contact.email} - ${contact.message}`,
+      when: contact.createdAt,
+      whenLabel: formatRelativeDate(contact.createdAt),
+    }))
+
+    const fromNewsletters = adminNewsletters.slice(0, 8).map((newsletter) => ({
+      id: `newsletter-${newsletter.id}`,
+      category: 'Newsletter',
+      targetSection: 'inbox',
+      actionLabel: 'Voir les inscriptions',
+      tone: 'default',
+      isUnread: !readNotificationIds.includes(`newsletter-${newsletter.id}`),
+      title: 'Nouvelle inscription newsletter',
+      description: newsletter.email,
+      when: newsletter.createdAt,
+      whenLabel: formatRelativeDate(newsletter.createdAt),
+    }))
+
+    return [...fromReservations, ...fromPayments, ...fromContacts, ...fromNewsletters]
+      .sort((a, b) => new Date(b.when || 0).getTime() - new Date(a.when || 0).getTime())
+      .slice(0, 16)
+  }, [adminReservations, adminPayments, adminContacts, adminNewsletters, readNotificationIds])
+
+  const unreadNotificationCount = notifications.filter((item) => item.isUnread).length
+  navItems[1].badgeCount = unreadNotificationCount
+
+  const showFlash = (message) => {
+    setFlash(message)
+    window.clearTimeout(showFlash.timeoutId)
+    showFlash.timeoutId = window.setTimeout(() => setFlash(''), 2600)
+  }
 
   const loadAdminData = async () => {
     if (!authToken) return
 
     try {
-      const [reservationsData, paymentsData] = await Promise.all([
+      const [reservationsData, paymentsData, contactsData, newslettersData] = await Promise.all([
         apiGet('/api/admin/reservations', authToken),
         apiGet('/api/admin/payments', authToken),
+        apiGet('/api/admin/contacts', authToken),
+        apiGet('/api/admin/newsletters', authToken),
       ])
       setAdminReservations(reservationsData.reservations || [])
       setAdminPayments(paymentsData.payments || [])
+      setAdminContacts(contactsData.contacts || [])
+      setAdminNewsletters(newslettersData.newsletters || [])
     } catch {
       setAdminReservations([])
       setAdminPayments([])
+      setAdminContacts([])
+      setAdminNewsletters([])
     }
   }
 
@@ -218,10 +333,27 @@ function AdminDashboard() {
     loadAdminData()
   }, [authToken])
 
-  const showFlash = (message) => {
-    setFlash(message)
-    window.clearTimeout(showFlash.timeoutId)
-    showFlash.timeoutId = window.setTimeout(() => setFlash(''), 2500)
+  const simulatePaymentStatus = async (reference, status = 'completed') => {
+    await apiPost(`/api/admin/payments/${encodeURIComponent(reference)}/simulate`, { status }, authToken)
+    await loadAdminData()
+  }
+
+  const handleCopyPaymentReference = async (reference) => {
+    try {
+      await navigator.clipboard.writeText(reference)
+      showFlash('Reference copitee.')
+    } catch {
+      showFlash('Impossible de copier la reference sur ce navigateur.')
+    }
+  }
+
+  const handleQuickSimulatePayment = async (reference) => {
+    try {
+      await simulatePaymentStatus(reference, 'completed')
+      showFlash('Paiement marque completed.')
+    } catch (error) {
+      showFlash(error.message)
+    }
   }
 
   const handleImagesSelected = async (event, setForm, setLoadingFlag) => {
@@ -247,15 +379,8 @@ function AdminDashboard() {
     }
   }
 
-  const handleRemoveRoomImage = (image) => {
-    setRoomForm((current) => removeImageFromForm(current, image))
-  }
-
-  const handleRemoveSpaceImage = (image) => {
-    setSpaceForm((current) => removeImageFromForm(current, image))
-  }
-
   const handleEditRoom = (room) => {
+    setActiveSection('rooms')
     setRoomForm({
       id: room.id,
       nameFr: room.name?.fr || '',
@@ -273,10 +398,10 @@ function AdminDashboard() {
       highlightsEn: (room.highlights?.en || []).join(', '),
       featured: Boolean(room.featured),
     })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleEditSpace = (space) => {
+    setActiveSection('spaces')
     setSpaceForm({
       id: space.id,
       titleFr: space.title?.fr || '',
@@ -291,7 +416,18 @@ function AdminDashboard() {
       highlightsEn: (space.highlights?.en || []).join(', '),
       accent: space.accent || 'from-[#f7d7de] to-[#7a2230]',
     })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleEditTestimonial = (testimonial) => {
+    setActiveSection('content')
+    setTestimonialForm({
+      id: testimonial.id,
+      name: testimonial.name || '',
+      roleFr: testimonial.role?.fr || '',
+      roleEn: testimonial.role?.en || '',
+      textFr: testimonial.text?.fr || '',
+      textEn: testimonial.text?.en || '',
+    })
   }
 
   const handleSubmitRoom = async (event) => {
@@ -300,7 +436,7 @@ function AdminDashboard() {
     const image = roomForm.image.trim()
 
     if (!nameFr || !image) {
-      showFlash('Le nom de la chambre et l’image principale sont obligatoires.')
+      showFlash('Le nom de la chambre et l image principale sont obligatoires.')
       return
     }
 
@@ -329,10 +465,10 @@ function AdminDashboard() {
     try {
       if (roomForm.id) {
         await updateRoom(roomForm.id, payload)
-        showFlash('Chambre mise à jour avec succès.')
+        showFlash('Chambre mise a jour avec succes.')
       } else {
         await addRoom(payload)
-        showFlash('Chambre ajoutée avec succès.')
+        showFlash('Chambre ajoutee avec succes.')
       }
       setRoomForm(emptyRoomForm())
     } catch (error) {
@@ -346,7 +482,7 @@ function AdminDashboard() {
     const image = spaceForm.image.trim()
 
     if (!titleFr || !image) {
-      showFlash('Le nom de la salle et l’image principale sont obligatoires.')
+      showFlash('Le nom de la salle et l image principale sont obligatoires.')
       return
     }
 
@@ -370,12 +506,40 @@ function AdminDashboard() {
     try {
       if (spaceForm.id) {
         await updateSpace(spaceForm.id, payload)
-        showFlash('Salle mise à jour avec succès.')
+        showFlash('Salle mise a jour avec succes.')
       } else {
         await addSpace(payload)
-        showFlash('Salle ajoutée avec succès.')
+        showFlash('Salle ajoutee avec succes.')
       }
       setSpaceForm(emptySpaceForm())
+    } catch (error) {
+      showFlash(error.message)
+    }
+  }
+
+  const handleSubmitTestimonial = async (event) => {
+    event.preventDefault()
+
+    if (!testimonialForm.name.trim() || !testimonialForm.textFr.trim()) {
+      showFlash('Le nom et le texte francais du temoignage sont obligatoires.')
+      return
+    }
+
+    const payload = {
+      name: testimonialForm.name.trim(),
+      role: toLocalized(testimonialForm.roleFr, testimonialForm.roleEn),
+      text: toLocalized(testimonialForm.textFr, testimonialForm.textEn),
+    }
+
+    try {
+      if (testimonialForm.id) {
+        await updateTestimonial(testimonialForm.id, payload)
+        showFlash('Temoignage mis a jour avec succes.')
+      } else {
+        await addTestimonial(payload)
+        showFlash('Temoignage ajoute avec succes.')
+      }
+      setTestimonialForm(emptyTestimonialForm())
     } catch (error) {
       showFlash(error.message)
     }
@@ -384,10 +548,8 @@ function AdminDashboard() {
   const handleDeleteRoom = async (id) => {
     try {
       await deleteRoom(id)
-      if (Number(roomForm.id) === Number(id)) {
-        setRoomForm(emptyRoomForm())
-      }
-      showFlash('Chambre supprimée.')
+      if (Number(roomForm.id) === Number(id)) setRoomForm(emptyRoomForm())
+      showFlash('Chambre supprimee.')
     } catch (error) {
       showFlash(error.message)
     }
@@ -396,10 +558,18 @@ function AdminDashboard() {
   const handleDeleteSpace = async (id) => {
     try {
       await deleteSpace(id)
-      if (Number(spaceForm.id) === Number(id)) {
-        setSpaceForm(emptySpaceForm())
-      }
-      showFlash('Salle supprimée.')
+      if (Number(spaceForm.id) === Number(id)) setSpaceForm(emptySpaceForm())
+      showFlash('Salle supprimee.')
+    } catch (error) {
+      showFlash(error.message)
+    }
+  }
+
+  const handleDeleteTestimonial = async (id) => {
+    try {
+      await deleteTestimonial(id)
+      if (Number(testimonialForm.id) === Number(id)) setTestimonialForm(emptyTestimonialForm())
+      showFlash('Temoignage supprime.')
     } catch (error) {
       showFlash(error.message)
     }
@@ -409,243 +579,183 @@ function AdminDashboard() {
     try {
       await apiPost(`/api/admin/reservations/${reservationId}/cancel`, {}, authToken)
       await loadAdminData()
-      showFlash('Réservation annulée.')
+      showFlash('Reservation annulee.')
     } catch (error) {
       showFlash(error.message)
     }
   }
 
-  return (
-    <main className="section-wrap py-12">
-      <div className="flex flex-col gap-4 rounded-[32px] bg-white p-8 shadow-xl shadow-black/5 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.35em] text-black/45">Administration sécurisée</p>
-          <h1 className="mt-3 font-serif text-5xl">Tableau de bord</h1>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-black/70">Connecté en tant que <strong>{user?.email}</strong>. Les chambres, salles, réservations et paiements sont pilotés par l’API locale du projet.</p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={() => navigate('/')} className="rounded-full border border-black/10 px-5 py-3 text-sm font-semibold text-black/80">Voir le site</button>
-          <button type="button" onClick={logout} className="rounded-full bg-[#7a2230] px-5 py-3 text-sm font-semibold text-white">Déconnexion</button>
-        </div>
-      </div>
+  const handleSimulatePayment = async (event) => {
+    event.preventDefault()
 
-      <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat) => (
-          <div key={stat.label} className="rounded-[24px] bg-white p-5 shadow-lg shadow-black/5">
-            <p className="text-xs uppercase tracking-[0.25em] text-black/40">{stat.label}</p>
-            <p className="mt-3 font-serif text-4xl">{stat.value}</p>
-            <p className="mt-2 text-xs leading-5 text-black/50">{stat.hint}</p>
-          </div>
-        ))}
-      </div>
+    if (!paymentSimulationForm.reference.trim()) {
+      showFlash('La reference de paiement est obligatoire pour la simulation.')
+      return
+    }
 
-      {flash ? <div className="mt-6 rounded-2xl bg-green-50 px-5 py-4 text-sm text-green-700">{flash}</div> : null}
+    try {
+      await simulatePaymentStatus(paymentSimulationForm.reference.trim(), paymentSimulationForm.status)
+      setPaymentSimulationForm(emptyPaymentSimulationForm())
+      showFlash('Callback PayGate simule avec succes.')
+    } catch (error) {
+      showFlash(error.message)
+    }
+  }
 
-      <div className="mt-10 grid gap-10">
-        <section className="grid gap-8 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-          <form onSubmit={handleSubmitRoom} className="rounded-[32px] bg-white p-8 shadow-xl shadow-black/5">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="font-serif text-3xl">{roomForm.id ? 'Modifier une chambre' : 'Ajouter une chambre'}</h2>
-              {roomForm.id ? <button type="button" onClick={() => setRoomForm(emptyRoomForm())} className="text-sm font-semibold text-[#7a2230]">Annuler</button> : null}
-            </div>
-            <div className="mt-6 grid gap-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <input value={roomForm.nameFr} onChange={(e) => setRoomForm((s) => ({ ...s, nameFr: e.target.value }))} placeholder="Nom FR" className="h-12 rounded-2xl border border-black/10 px-4" />
-                <input value={roomForm.nameEn} onChange={(e) => setRoomForm((s) => ({ ...s, nameEn: e.target.value }))} placeholder="Nom EN" className="h-12 rounded-2xl border border-black/10 px-4" />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <input value={roomForm.price} onChange={(e) => setRoomForm((s) => ({ ...s, price: e.target.value }))} placeholder="Prix" className="h-12 rounded-2xl border border-black/10 px-4" />
-                <input value={roomForm.size} onChange={(e) => setRoomForm((s) => ({ ...s, size: e.target.value }))} placeholder="Taille" className="h-12 rounded-2xl border border-black/10 px-4" />
-                <input value={roomForm.capacity} onChange={(e) => setRoomForm((s) => ({ ...s, capacity: e.target.value }))} placeholder="Capacité" className="h-12 rounded-2xl border border-black/10 px-4" />
-              </div>
-              <input value={roomForm.image} onChange={(e) => setRoomForm((s) => ({ ...s, image: e.target.value }))} placeholder="Image principale" className="h-12 rounded-2xl border border-black/10 px-4" />
-              <input value={roomForm.gallery} onChange={(e) => setRoomForm((s) => ({ ...s, gallery: e.target.value }))} placeholder="Autres images, séparées par des virgules" className="h-12 rounded-2xl border border-black/10 px-4" />
-              <label className="rounded-2xl border border-dashed border-black/15 p-4 text-sm text-black/70">
-                <span className="mb-2 block font-medium text-black/80">Téléverser des images</span>
-                <input type="file" accept="image/*" multiple onChange={(event) => handleImagesSelected(event, setRoomForm, setIsUploadingRoomImages)} className="block w-full text-sm" />
-                <span className="mt-2 block text-xs text-black/45">{isUploadingRoomImages ? 'Chargement des images...' : 'Tu peux supprimer les anciennes images juste en dessous puis en ajouter de nouvelles.'}</span>
-              </label>
-              <div className="rounded-[24px] border border-black/10 p-4">
-                <p className="mb-3 text-sm font-semibold text-black/80">Images actuelles de la chambre</p>
-                <FormImageGallery images={roomFormImages} mainImage={roomForm.image.trim()} onRemove={handleRemoveRoomImage} emptyText="Aucune image sélectionnée pour cette chambre." />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <textarea value={roomForm.descriptionFr} onChange={(e) => setRoomForm((s) => ({ ...s, descriptionFr: e.target.value }))} placeholder="Description FR" className="min-h-[120px] rounded-2xl border border-black/10 p-4" />
-                <textarea value={roomForm.descriptionEn} onChange={(e) => setRoomForm((s) => ({ ...s, descriptionEn: e.target.value }))} placeholder="Description EN" className="min-h-[120px] rounded-2xl border border-black/10 p-4" />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <input value={roomForm.amenitiesFr} onChange={(e) => setRoomForm((s) => ({ ...s, amenitiesFr: e.target.value }))} placeholder="Équipements FR" className="h-12 rounded-2xl border border-black/10 px-4" />
-                <input value={roomForm.amenitiesEn} onChange={(e) => setRoomForm((s) => ({ ...s, amenitiesEn: e.target.value }))} placeholder="Amenities EN" className="h-12 rounded-2xl border border-black/10 px-4" />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <input value={roomForm.highlightsFr} onChange={(e) => setRoomForm((s) => ({ ...s, highlightsFr: e.target.value }))} placeholder="Points forts FR" className="h-12 rounded-2xl border border-black/10 px-4" />
-                <input value={roomForm.highlightsEn} onChange={(e) => setRoomForm((s) => ({ ...s, highlightsEn: e.target.value }))} placeholder="Highlights EN" className="h-12 rounded-2xl border border-black/10 px-4" />
-              </div>
-              <label className="flex items-center gap-3 rounded-2xl border border-black/10 p-4 text-sm">
-                <input type="checkbox" checked={roomForm.featured} onChange={(e) => setRoomForm((s) => ({ ...s, featured: e.target.checked }))} />
-                Afficher en chambre mise en avant
-              </label>
-              <button type="submit" className="rounded-2xl bg-[#7a2230] py-3 text-sm font-semibold text-white">{roomForm.id ? 'Mettre à jour la chambre' : 'Enregistrer la chambre'}</button>
-            </div>
-          </form>
+  const handleOpenNotification = (notification) => {
+    if (!notification?.targetSection) return
+    setReadNotificationIds((current) => (current.includes(notification.id) ? current : [...current, notification.id]))
+    setActiveSection(notification.targetSection)
+    showFlash(`Ouverture de la section ${notification.targetSection}.`)
+  }
 
-          <section className="rounded-[32px] bg-white p-8 shadow-xl shadow-black/5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-black/40">Gestion chambres</p>
-                <h2 className="mt-2 font-serif text-3xl">Chambres visibles pendant la modification</h2>
-              </div>
-              <span className="rounded-full bg-[#f7eaea] px-4 py-2 text-sm font-semibold text-[#7a2230]">{rooms.length} chambre{rooms.length > 1 ? 's' : ''}</span>
-            </div>
-            <div className="mt-6 grid gap-4">
-              {rooms.map((room) => (
-                <article key={room.id} className="rounded-[28px] border border-black/8 bg-[#fffdfc] p-5 shadow-lg shadow-black/5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="font-serif text-2xl">{room.name?.fr ?? room.name}</h3>
-                      <p className="mt-1 text-sm text-black/60">{Number(room.price || 0).toLocaleString('fr-FR')} XOF / nuit</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => handleEditRoom(room)} className="rounded-full border border-black/10 px-4 py-2 text-sm font-semibold text-black/80">Modifier</button>
-                      <button type="button" onClick={() => handleDeleteRoom(room.id)} className="rounded-full border border-red-200 px-4 py-2 text-sm font-semibold text-red-600">Supprimer</button>
-                    </div>
-                  </div>
-                  {room.image ? <img src={room.image} alt={room.name?.fr ?? room.name} className="mt-4 h-44 w-full rounded-[18px] object-cover" /> : null}
-                  <p className="mt-3 text-sm leading-7 text-black/70">{room.description?.fr ?? room.description}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-        </section>
+  const handleMarkNotificationAsRead = (notificationId) => {
+    setReadNotificationIds((current) => (current.includes(notificationId) ? current : [...current, notificationId]))
+  }
 
-        <section className="grid gap-8 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-          <form onSubmit={handleSubmitSpace} className="rounded-[32px] bg-white p-8 shadow-xl shadow-black/5">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="font-serif text-3xl">{spaceForm.id ? 'Modifier une salle' : 'Ajouter une salle'}</h2>
-              {spaceForm.id ? <button type="button" onClick={() => setSpaceForm(emptySpaceForm())} className="text-sm font-semibold text-[#7a2230]">Annuler</button> : null}
-            </div>
-            <div className="mt-6 grid gap-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <input value={spaceForm.titleFr} onChange={(e) => setSpaceForm((s) => ({ ...s, titleFr: e.target.value }))} placeholder="Titre FR" className="h-12 rounded-2xl border border-black/10 px-4" />
-                <input value={spaceForm.titleEn} onChange={(e) => setSpaceForm((s) => ({ ...s, titleEn: e.target.value }))} placeholder="Titre EN" className="h-12 rounded-2xl border border-black/10 px-4" />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <textarea value={spaceForm.textFr} onChange={(e) => setSpaceForm((s) => ({ ...s, textFr: e.target.value }))} placeholder="Texte court FR" className="min-h-[110px] rounded-2xl border border-black/10 p-4" />
-                <textarea value={spaceForm.textEn} onChange={(e) => setSpaceForm((s) => ({ ...s, textEn: e.target.value }))} placeholder="Short text EN" className="min-h-[110px] rounded-2xl border border-black/10 p-4" />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <textarea value={spaceForm.descriptionFr} onChange={(e) => setSpaceForm((s) => ({ ...s, descriptionFr: e.target.value }))} placeholder="Description FR" className="min-h-[120px] rounded-2xl border border-black/10 p-4" />
-                <textarea value={spaceForm.descriptionEn} onChange={(e) => setSpaceForm((s) => ({ ...s, descriptionEn: e.target.value }))} placeholder="Description EN" className="min-h-[120px] rounded-2xl border border-black/10 p-4" />
-              </div>
-              <input value={spaceForm.image} onChange={(e) => setSpaceForm((s) => ({ ...s, image: e.target.value }))} placeholder="Image principale" className="h-12 rounded-2xl border border-black/10 px-4" />
-              <input value={spaceForm.gallery} onChange={(e) => setSpaceForm((s) => ({ ...s, gallery: e.target.value }))} placeholder="Autres images, séparées par des virgules" className="h-12 rounded-2xl border border-black/10 px-4" />
-              <input value={spaceForm.accent} onChange={(e) => setSpaceForm((s) => ({ ...s, accent: e.target.value }))} placeholder="Classe accent Tailwind" className="h-12 rounded-2xl border border-black/10 px-4" />
-              <label className="rounded-2xl border border-dashed border-black/15 p-4 text-sm text-black/70">
-                <span className="mb-2 block font-medium text-black/80">Téléverser des images</span>
-                <input type="file" accept="image/*" multiple onChange={(event) => handleImagesSelected(event, setSpaceForm, setIsUploadingSpaceImages)} className="block w-full text-sm" />
-                <span className="mt-2 block text-xs text-black/45">{isUploadingSpaceImages ? 'Chargement des images...' : 'Tu peux aussi retirer les anciennes images d’une salle avant d’en ajouter de nouvelles.'}</span>
-              </label>
-              <div className="rounded-[24px] border border-black/10 p-4">
-                <p className="mb-3 text-sm font-semibold text-black/80">Images actuelles de la salle</p>
-                <FormImageGallery images={spaceFormImages} mainImage={spaceForm.image.trim()} onRemove={handleRemoveSpaceImage} emptyText="Aucune image sélectionnée pour cette salle." />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <input value={spaceForm.highlightsFr} onChange={(e) => setSpaceForm((s) => ({ ...s, highlightsFr: e.target.value }))} placeholder="Points forts FR" className="h-12 rounded-2xl border border-black/10 px-4" />
-                <input value={spaceForm.highlightsEn} onChange={(e) => setSpaceForm((s) => ({ ...s, highlightsEn: e.target.value }))} placeholder="Highlights EN" className="h-12 rounded-2xl border border-black/10 px-4" />
-              </div>
-              <button type="submit" className="rounded-2xl bg-[#7a2230] py-3 text-sm font-semibold text-white">{spaceForm.id ? 'Mettre à jour la salle' : 'Enregistrer la salle'}</button>
-            </div>
-          </form>
+  const handleMarkAllNotificationsAsRead = () => {
+    setReadNotificationIds((current) => {
+      const next = new Set(current)
+      notifications.forEach((notification) => next.add(notification.id))
+      return Array.from(next)
+    })
+    showFlash('Toutes les notifications sont marquees comme lues.')
+  }
 
-          <section className="rounded-[32px] bg-white p-8 shadow-xl shadow-black/5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-black/40">Gestion salles</p>
-                <h2 className="mt-2 font-serif text-3xl">Salles & espaces</h2>
-              </div>
-              <span className="rounded-full bg-[#f7eaea] px-4 py-2 text-sm font-semibold text-[#7a2230]">{spaces.length} espace{spaces.length > 1 ? 's' : ''}</span>
-            </div>
-            <div className="mt-6 grid gap-4">
-              {spaces.map((space) => (
-                <article key={space.id} className="rounded-[28px] border border-black/8 bg-[#fffdfc] p-5 shadow-lg shadow-black/5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="font-serif text-2xl">{space.title?.fr ?? space.title}</h3>
-                      <p className="mt-1 text-sm text-black/60">{space.slug}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => handleEditSpace(space)} className="rounded-full border border-black/10 px-4 py-2 text-sm font-semibold text-black/80">Modifier</button>
-                      <button type="button" onClick={() => handleDeleteSpace(space.id)} className="rounded-full border border-red-200 px-4 py-2 text-sm font-semibold text-red-600">Supprimer</button>
-                    </div>
-                  </div>
-                  {space.image ? <img src={space.image} alt={space.title?.fr ?? space.title} className="mt-4 h-44 w-full rounded-[18px] object-cover" /> : null}
-                  <p className="mt-3 text-sm leading-7 text-black/70">{space.description?.fr ?? space.description}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-        </section>
-
-        <section className="grid gap-8 xl:grid-cols-2">
-          <section className="rounded-[32px] bg-white p-8 shadow-xl shadow-black/5">
-            <h2 className="font-serif text-3xl">Réservations reçues</h2>
-            <div className="mt-6 grid gap-3">
-              {adminReservations.length ? adminReservations.map((reservation) => (
-                <div key={reservation.id} className="rounded-2xl border border-black/10 p-4 text-sm leading-7 text-black/75">
-                  <p><strong>Client :</strong> {reservation.userName || reservation.userEmail || 'Non renseigné'}</p>
-                  <p><strong>Chambre :</strong> {reservation.roomName}</p>
-                  <p><strong>Période :</strong> {reservation.checkIn || '...'} au {reservation.checkOut || '...'}</p>
-                  <p><strong>Statut :</strong> {reservation.status || 'pending'}</p>
-                  {reservation.status !== 'canceled' && reservation.paymentStatus !== 'completed' ? (
-                    <button type="button" onClick={() => handleCancelReservation(reservation.id)} className="mt-3 rounded-full border border-red-200 px-4 py-2 text-sm font-semibold text-red-600">
-                      Annuler la réservation
-                    </button>
-                  ) : reservation.status === 'canceled' ? <p className="mt-3 text-xs text-red-600">Réservation déjà annulée.</p> : <p className="mt-3 text-xs text-black/55">Réservation payée : annulation manuelle uniquement.</p>}
-                </div>
-              )) : <p className="text-sm text-black/55">Aucune réservation enregistrée.</p>}
-            </div>
-          </section>
-
-          <section className="rounded-[32px] bg-white p-8 shadow-xl shadow-black/5">
-            <h2 className="font-serif text-3xl">Paiements</h2>
-            <div className="mt-6 grid gap-3">
-              {adminPayments.length ? adminPayments.map((payment) => (
-                <div key={payment.id} className="rounded-2xl border border-black/10 p-4 text-sm leading-7 text-black/75">
-                  <p><strong>Référence :</strong> {payment.reference}</p>
-                  <p><strong>Montant :</strong> {Number(payment.amount || 0).toLocaleString('fr-FR')} XOF</p>
-                  <p><strong>Canal :</strong> {payment.provider}</p>
-                  <p><strong>Statut :</strong> {payment.status}</p>
-                </div>
-              )) : <p className="text-sm text-black/55">Aucun paiement enregistré.</p>}
-            </div>
-          </section>
-        </section>
-      </div>
-    </main>
-  )
-}
-
-export default function AdminPage() {
-  const navigate = useNavigate()
-  const { user, isAdmin, logout } = useSiteData()
+  const renderSection = () => {
+    switch (activeSection) {
+      case 'rooms':
+        return (
+          <AdminRoomsPanel
+            roomForm={roomForm}
+            setRoomForm={setRoomForm}
+            handleSubmitRoom={handleSubmitRoom}
+            handleImagesSelected={handleImagesSelected}
+            setIsUploadingRoomImages={setIsUploadingRoomImages}
+            isUploadingRoomImages={isUploadingRoomImages}
+            roomFormImages={roomFormImages}
+            removeImageFromForm={removeImageFromForm}
+            rooms={rooms}
+            handleEditRoom={handleEditRoom}
+            handleDeleteRoom={handleDeleteRoom}
+            emptyRoomForm={emptyRoomForm}
+          />
+        )
+      case 'notifications':
+        return (
+          <AdminNotificationsPanel
+            notifications={notifications}
+            onOpenNotification={handleOpenNotification}
+            onMarkAsRead={handleMarkNotificationAsRead}
+            onMarkAllAsRead={handleMarkAllNotificationsAsRead}
+          />
+        )
+      case 'spaces':
+        return (
+          <AdminSpacesPanel
+            spaceForm={spaceForm}
+            setSpaceForm={setSpaceForm}
+            handleSubmitSpace={handleSubmitSpace}
+            handleImagesSelected={handleImagesSelected}
+            setIsUploadingSpaceImages={setIsUploadingSpaceImages}
+            isUploadingSpaceImages={isUploadingSpaceImages}
+            spaceFormImages={spaceFormImages}
+            removeImageFromForm={removeImageFromForm}
+            spaces={spaces}
+            handleEditSpace={handleEditSpace}
+            handleDeleteSpace={handleDeleteSpace}
+            emptySpaceForm={emptySpaceForm}
+          />
+        )
+      case 'content':
+        return (
+          <AdminContentPanel
+            testimonialForm={testimonialForm}
+            setTestimonialForm={setTestimonialForm}
+            handleSubmitTestimonial={handleSubmitTestimonial}
+            testimonials={testimonials}
+            handleEditTestimonial={handleEditTestimonial}
+            handleDeleteTestimonial={handleDeleteTestimonial}
+            emptyTestimonialForm={emptyTestimonialForm}
+          />
+        )
+      case 'operations':
+        return <AdminOperationsPanel adminReservations={adminReservations} handleCancelReservation={handleCancelReservation} />
+      case 'payments':
+        return (
+          <AdminPaymentsPanel
+            paymentSimulationForm={paymentSimulationForm}
+            setPaymentSimulationForm={setPaymentSimulationForm}
+            handleSimulatePayment={handleSimulatePayment}
+            adminPayments={adminPayments}
+            handleCopyPaymentReference={handleCopyPaymentReference}
+            handleQuickSimulatePayment={handleQuickSimulatePayment}
+            handlePrefillSimulation={(reference) => {
+              setPaymentSimulationForm({ reference, status: 'completed' })
+              setActiveSection('payments')
+              showFlash('Reference pre-remplie dans la simulation.')
+            }}
+          />
+        )
+      case 'inbox':
+        return <AdminInboxPanel adminContacts={adminContacts} adminNewsletters={adminNewsletters} />
+      case 'settings':
+        return <AdminSettingsPanel navigate={navigate} setActiveSection={setActiveSection} user={user} logout={logout} />
+      default:
+        return <AdminOverviewPanel stats={stats} adminReservations={adminReservations} setActiveSection={setActiveSection} />
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-[#f7eaea] text-[#171717]">
-      <Navbar onBookNow={() => navigate('/#reservation')} isAdminAuthenticated={!!isAdmin} onLogout={logout} />
-      {!user ? <AdminLoginCard /> : isAdmin ? <AdminDashboard /> : (
-        <main className="section-wrap py-20">
-          <div className="rounded-[32px] bg-white p-8 shadow-xl shadow-black/5">
-            <h1 className="font-serif text-4xl">Accès refusé</h1>
-            <p className="mt-4 text-sm leading-7 text-black/70">Ce compte n’a pas les droits d’administration.</p>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#fff9f7_0%,#f7eaea_42%,#efd8dd_100%)] text-[#2f1b1f]">
+      <div className="grid min-h-screen lg:grid-cols-[280px_minmax(0,1fr)]">
+        <AdminSidebar navItems={navItems} activeSection={activeSection} setActiveSection={setActiveSection} user={user} logout={logout} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+
+        <main className="px-4 py-5 sm:px-6 lg:px-8 lg:pl-0">
+          <div className="mx-auto max-w-[1600px]">
+            <AdminTopbar
+              navigate={navigate}
+              setActiveSection={setActiveSection}
+              onOpenMenu={() => setIsSidebarOpen(true)}
+              activeSectionLabel={activeSectionLabel}
+              notificationCount={unreadNotificationCount}
+              notifications={notifications}
+              onOpenNotification={handleOpenNotification}
+              onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
+            />
+
+            {flash ? (
+              <div className="mt-5 rounded-[22px] border border-[#d8b0b8] bg-[#fff6f4] px-5 py-4 text-sm text-[#7a2230]">
+                {flash}
+              </div>
+            ) : null}
+
+            <div className="mt-6">{renderSection()}</div>
           </div>
         </main>
-      )}
-      <Footer />
+      </div>
     </div>
   )
 }
 
+export default function AdminPage() {
+  const { user, isAdmin } = useSiteData()
 
+  if (!user) {
+    return <AdminLoginCard />
+  }
 
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#fff8f6_0%,#f7eaea_42%,#efd6db_100%)] px-4 py-10 text-[#2f1b1f] sm:px-6 lg:px-10">
+        <div className="mx-auto max-w-3xl rounded-[36px] border border-[#7a2230]/10 bg-white/78 p-10 shadow-[0_35px_120px_rgba(122,34,48,0.12)] backdrop-blur">
+          <p className="text-[11px] uppercase tracking-[0.3em] text-[#a07a82]">Acces refuse</p>
+          <h1 className="mt-4 font-serif text-5xl text-[#2f1b1f]">Compte sans droits admin</h1>
+          <p className="mt-5 text-sm leading-8 text-[#7a5c61]">Ce compte n a pas acces au dashboard d administration separe.</p>
+        </div>
+      </div>
+    )
+  }
 
-
+  return <AdminDashboard />
+}
